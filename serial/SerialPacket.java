@@ -45,6 +45,9 @@ class SerialPacketWorker implements Runnable {
 	PNG png = new SerialPNG(numAddresses + 1);
 	R r = new SerialR(numAddresses + 1);
 	processor = new PacketProcessor(h, png, r);
+	for (int i = 0; i < numAddresses * Math.sqrt(numAddresses); i++) {
+	    processor.processConfigPacket(gen.getConfigPacket().config);
+	}
     }
     
     public void run() {
