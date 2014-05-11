@@ -143,7 +143,7 @@ class CoarseLockingPacket {
 	PaddedPrimitive<Boolean> wDone = new PaddedPrimitive<Boolean>(false);
 	PaddedPrimitive<Boolean> dDone = new PaddedPrimitive<Boolean>(false);
 	for (int i = 0; i < nWorkers; i++) {
-	    
+	    queues[i] = new WaitFreeQueue(8);
 	    CoarseLockingPacketProcessor proc = new CoarseLockingPacketProcessor(h, png, r);
 	    workers[i] = new ParallelPacketWorker(queues[i], wDone, proc);
 	}
