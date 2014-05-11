@@ -1,3 +1,5 @@
+import org.deuce.Atomic;
+
 interface Counter {
     void increment();
     int get();

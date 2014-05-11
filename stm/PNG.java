@@ -1,3 +1,4 @@
+import org.deuce.Atomic;
 interface PNG {
     public void processConfigPacket(Config conf);
     public boolean allowPacket(Header h);

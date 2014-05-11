@@ -1,4 +1,6 @@
 import java.util.Random;
+import org.deuce.Atomic;
+
 
 class IntervalSkipList {    
     final int MAX_LEVEL = 5;    

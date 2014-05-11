@@ -51,9 +51,11 @@ class STMPacketWorker implements Runnable {
     
     public void run() {
 	while (!done.value) {
-	    count++;
-	    Packet p = q.deq();
-	    processor.process(p);
+	    try {
+		Packet p = q.deq();
+		processor.process(p);
+		count++;
+	    } catch (EmptyException e) {}
 	}
     }
 }
@@ -115,13 +117,14 @@ class STMPacket {
 	StopWatch timer = new StopWatch();
 	STMPacketWorker[] workers = new STMPacketWorker[nWorkers];
 	WaitFreeQueue[] queues = new WaitFreeQueue[nWorkers];
-	int numAddresses = (1<<numAddresses);
+	int numAddresses = (1<<numAddressesLog);
 	Histogram h = new SerialHistogram(numAddresses + 1);
 	PNG png = new SerialPNG(numAddresses + 1);
 	R r = new SerialR(numAddresses + 1);
 	PaddedPrimitive<Boolean> wDone = new PaddedPrimitive<Boolean>(false);
 	PaddedPrimitive<Boolean> dDone = new PaddedPrimitive<Boolean>(false);
 	for (int i = 0; i < nWorkers; i++) {
+	    queues[i] = new WaitFreeQueue(8);
 	    workers[i] = new STMPacketWorker(queues[i], wDone, h, png, r);
 	}
 	Thread[] workerThreads = new Thread[nWorkers];
