@@ -7,12 +7,12 @@ interface PacketProcessor {
     public void processDataPacket(Header header, Body body);
 }
 
-class CoarseLockingPacketProcessor implements PacketProcessor {
-    CoarseLockingHistogram h;
-    CoarseLockingPNG png;
-    CoarseLockingR r;
+class LockingPacketProcessor implements PacketProcessor {
+    Histogram h;
+    PNG png;
+    R r;
     Fingerprint f;
-    public CoarseLockingPacketProcessor(CoarseLockingHistogram h,  CoarseLockingPNG png, CoarseLockingR r) {
+    public LockingPacketProcessor(Histogram h,  PNG png, R r) {
 	this.h = h;
 	this.png = png;
 	this.r = r;
@@ -26,25 +26,26 @@ class CoarseLockingPacketProcessor implements PacketProcessor {
 	}
     }
     public void processConfigPacket(Config conf) {
-	png.lock.writeLock().lock();
-	r.lock.writeLock().lock();
+	png.lockWrite(conf.address);
+	r.lockWrite(conf.address);
 	png.processConfigPacket(conf);
 	r.processConfigPacket(conf);
-	r.lock.writeLock().unlock();
-	png.lock.writeLock().unlock();
+	r.unlockWrite(conf.address);
+	png.unlockWrite(conf.address);
     }
     public void processDataPacket(Header header, Body body) {
-	png.lock.readLock().lock();
-	r.lock.readLock().lock();
+	png.lockRead(header.source);
+	r.lockRead(header.dest);
 	boolean allowed = png.allowPacket(header) && r.allowPacket(header);
-	r.lock.readLock().unlock();
-	png.lock.readLock().unlock();
+	r.unlockRead(header.dest);
+	png.unlockRead(header.source);
 	if (allowed) {
 	    f.getFingerprint(body.iterations, body.seed);
 	}
     }
     
 }
+
 
 
 class ParallelPacketWorker implements Runnable {
@@ -58,13 +59,11 @@ class ParallelPacketWorker implements Runnable {
 	this.done = done;
 	this.q = q;
 	count = 0;
-
 	processor = worker;
     }
     
     public void run() {
 	while (!done.value) {
-
 	    try {
 		Packet p = q.deq();
 		count++;
@@ -103,7 +102,50 @@ class Dispatcher implements Runnable {
     }
 }
 
-class CoarseLockingPacket {
+
+class LockingPacket {
+    static Histogram getHistogram(int i, int nAddresses, int nThreads) {
+	switch(i) {
+	case 0:
+	    return new CoarseLockingHistogram(nAddresses);
+	case 1:
+	    return new FineLockingHistogram(nAddresses);
+	case 2:
+	    return new StripedLockingHistogram(nAddresses, nThreads);
+	case 3:
+	    return new AtomicHistogram(nAddresses, nThreads);
+	}
+	return new CoarseLockingHistogram(nAddresses);
+    }
+
+
+    static R getR(int i, int nAddresses, int nThreads) {
+	switch(i) {
+	case 0:
+	    return new CoarseLockingR(nAddresses);
+	case 1:
+	    return new FineLockingR(nAddresses);
+	case 2:
+	    return new StripedLockingR(nAddresses, nThreads);
+	}
+	return new CoarseLockingR(nAddresses);
+    }
+
+
+    static PNG getPNG(int i, int nAddresses, int nThreads) {
+	switch(i) {
+	case 0:
+	    return new CoarseLockingPNG(nAddresses);
+	case 1:
+	    return new FineLockingPNG(nAddresses);
+	case 2:
+	    return new StripedLockingPNG(nAddresses, nThreads);
+	}
+	return new CoarseLockingPNG(nAddresses);
+    }
+
+
+
     public static void main(String[] args) {
 
 	final int numMilliseconds = Integer.parseInt(args[0]);    
@@ -118,6 +160,7 @@ class CoarseLockingPacket {
 	double pngFraction =  Double.parseDouble(args[9]);
 	double acceptingFraction =  Double.parseDouble(args[10]);
 	int nWorkers = Integer.parseInt(args[11]);
+	int lockType = Integer.parseInt(args[12]);
 
 	PacketGenerator gen = new PacketGenerator(numAddressesLog,
 						  numTrainsLog,
@@ -133,10 +176,10 @@ class CoarseLockingPacket {
 	ParallelPacketWorker[] workers = new ParallelPacketWorker[nWorkers];
 	WaitFreeQueue[] queues = new WaitFreeQueue[nWorkers];
 	int numAddresses = (1<<numAddressesLog);
-	CoarseLockingHistogram h = new CoarseLockingHistogram(numAddresses + 1);
-	CoarseLockingPNG png = new CoarseLockingPNG(numAddresses + 1);
-	CoarseLockingR r = new CoarseLockingR(numAddresses + 1);
-	PacketProcessor processor = new CoarseLockingPacketProcessor(h, png, r);
+	Histogram h = getHistogram(lockType, numAddresses + 1, nWorkers);
+	PNG png = getPNG(lockType, numAddresses + 1, nWorkers);
+	R r = getR(lockType, numAddresses + 1, nWorkers);
+	PacketProcessor processor = new LockingPacketProcessor(h, png, r);
 	for (int i = 0; i < numAddresses * Math.sqrt(numAddresses); i++) {
 	    processor.processConfigPacket(gen.getConfigPacket().config);
 	}
@@ -144,7 +187,7 @@ class CoarseLockingPacket {
 	PaddedPrimitive<Boolean> dDone = new PaddedPrimitive<Boolean>(false);
 	for (int i = 0; i < nWorkers; i++) {
 	    queues[i] = new WaitFreeQueue(8);
-	    CoarseLockingPacketProcessor proc = new CoarseLockingPacketProcessor(h, png, r);
+	    LockingPacketProcessor proc = new LockingPacketProcessor(h, png, r);
 	    workers[i] = new ParallelPacketWorker(queues[i], wDone, proc);
 	}
 	Thread[] workerThreads = new Thread[nWorkers];
@@ -165,6 +208,21 @@ class CoarseLockingPacket {
 		workerThreads[i].join();
 	} catch (InterruptedException e) {}
 	timer.stopTimer();
-	System.out.println((double)(disp.count)/timer.getElapsedTime());
+	System.out.println("==");
+	System.out.println("NumAddressesLog: " + numAddressesLog);
+	System.out.println("NumTrainsLog: " + numTrainsLog);
+	System.out.println("MeanTrainSize: " + meanTrainSize);
+	System.out.println("MeanTrainsPerComm: " + meanTrainsPerComm);
+	System.out.println("MeanWindow: " + meanWindow);
+	System.out.println("MeanCommsPerAddress: " + meanCommsPerAddress);
+	System.out.println("MeanWork: " + meanWork);
+	System.out.println("ConfigFraction: " + configFraction);
+	System.out.println("PNGFraction: " + pngFraction);
+	System.out.println("AcceptingFraction: " + acceptingFraction);
+	System.out.println("nWorkers: " + nWorkers);
+	System.out.println("lockType:" + lockType);
+	
+	System.out.println("Packets/ms: " + (double)(disp.count)/timer.getElapsedTime());
     }
 }
+
