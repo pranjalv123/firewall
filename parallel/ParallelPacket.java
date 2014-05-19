@@ -121,7 +121,6 @@ class SmartDispatcher implements Dispatcher {
 	this.done = done;
     }
     public void run() {
-	System.out.println(qs.length);
 	int i = 0;
 	Packet p = gen.getPacket();
 	while (!done.value) {
