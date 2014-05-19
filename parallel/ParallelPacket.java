@@ -161,6 +161,7 @@ class LockingPacket {
 	double acceptingFraction =  Double.parseDouble(args[10]);
 	int nWorkers = Integer.parseInt(args[11]);
 	int lockType = Integer.parseInt(args[12]);
+	int cacheR = Integer.parseInt(args[13]);
 
 	PacketGenerator gen = new PacketGenerator(numAddressesLog,
 						  numTrainsLog,
@@ -185,9 +186,25 @@ class LockingPacket {
 	}
 	PaddedPrimitive<Boolean> wDone = new PaddedPrimitive<Boolean>(false);
 	PaddedPrimitive<Boolean> dDone = new PaddedPrimitive<Boolean>(false);
+	RCache[] caches;
+	caches = new RCache[nWorkers];
+	if (cacheR > 0) {
+	    for (int i = 0; i < nWorkers; i++) {
+		caches[i] = new RCache(r);
+	    }
+	    for (int i = 0; i < nWorkers; i++) {
+		caches[i].setOtherCaches(caches);
+	    }
+	    
+	}
 	for (int i = 0; i < nWorkers; i++) {
-	    queues[i] = new WaitFreeQueue(8);
-	    LockingPacketProcessor proc = new LockingPacketProcessor(h, png, r);
+	    queues[i] = new WaitFreeQueue(8);	   
+	    LockingPacketProcessor proc ;
+	    if (cacheR > 0) {
+		proc = new LockingPacketProcessor(h, png, caches[i]);
+	    } else {
+		proc = new LockingPacketProcessor(h, png, r);
+	    }
 	    workers[i] = new ParallelPacketWorker(queues[i], wDone, proc);
 	}
 	Thread[] workerThreads = new Thread[nWorkers];
@@ -221,7 +238,7 @@ class LockingPacket {
 	System.out.println("AcceptingFraction: " + acceptingFraction);
 	System.out.println("nWorkers: " + nWorkers);
 	System.out.println("lockType:" + lockType);
-	
+	System.out.println("cacheR:" + cacheR);
 	System.out.println("Packets/ms: " + (double)(disp.count)/timer.getElapsedTime());
     }
 }
