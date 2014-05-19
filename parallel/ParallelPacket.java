@@ -74,13 +74,16 @@ class ParallelPacketWorker implements Runnable {
     }
 }
 
+interface Dispatcher extends Runnable{
+    public int count();
+}
 
-class Dispatcher implements Runnable {
+class DumbDispatcher implements Dispatcher {
     PaddedPrimitive<Boolean> done;
     WaitFreeQueue[] qs;
     PacketGenerator gen;
     int count;
-    public Dispatcher(PaddedPrimitive<Boolean> done, WaitFreeQueue[] qs, PacketGenerator gen) {
+    public DumbDispatcher(PaddedPrimitive<Boolean> done, WaitFreeQueue[] qs, PacketGenerator gen) {
 	count = 0;
 	this.gen = gen;
 	this.qs = qs;
@@ -90,7 +93,7 @@ class Dispatcher implements Runnable {
 	int i = 0;
 	Packet p = gen.getPacket();
 	while (!done.value) {	    
-	    try {
+	    try {		
 		qs[i].enq(p);
 		p = gen.getPacket();
 		count++;
@@ -100,8 +103,49 @@ class Dispatcher implements Runnable {
 	    i %= qs.length;
 	}
     }
+    public int count() {
+	return count;
+    }
 }
 
+
+class SmartDispatcher implements Dispatcher {
+    PaddedPrimitive<Boolean> done;
+    WaitFreeQueue[] qs;
+    PacketGenerator gen;
+    int count;
+    SmartDispatcher(PaddedPrimitive<Boolean> done, WaitFreeQueue[] qs, PacketGenerator gen) {
+	count = 0;
+	this.gen = gen;
+	this.qs = qs;
+	this.done = done;
+    }
+    public void run() {
+	System.out.println(qs.length);
+	int i = 0;
+	Packet p = gen.getPacket();
+	while (!done.value) {
+	    if (p.type == Packet.MessageType.DataPacket) {
+		try {
+		    qs[p.header.dest % qs.length].enq(p);
+		    p = gen.getPacket();
+		    count++;
+		} catch (FullException f) {
+		}
+	    } else {
+		try {
+		    qs[p.config.address % qs.length].enq(p);
+		    p = gen.getPacket();
+		    count++;
+		} catch (FullException f) {
+		}		
+	    }
+	}
+    }
+    public int count() {
+	return count;
+    }
+}
 
 class LockingPacket {
     static Histogram getHistogram(int i, int nAddresses, int nThreads) {
@@ -162,6 +206,7 @@ class LockingPacket {
 	int nWorkers = Integer.parseInt(args[11]);
 	int lockType = Integer.parseInt(args[12]);
 	int cacheR = Integer.parseInt(args[13]);
+	int dispType = Integer.parseInt(args[14]);
 
 	PacketGenerator gen = new PacketGenerator(numAddressesLog,
 						  numTrainsLog,
@@ -212,7 +257,12 @@ class LockingPacket {
 	     workerThreads[i] = new Thread(workers[i]);
 	     workerThreads[i].start();
 	}
-	Dispatcher disp = new Dispatcher(dDone, queues, gen);
+	Dispatcher disp;
+	if (dispType == 0) {
+	    disp = new DumbDispatcher(dDone, queues, gen);
+	} else {
+	    disp = new SmartDispatcher(dDone, queues, gen);
+	}
 	Thread dispThread = new Thread(disp);
 	dispThread.start();
 	try {
@@ -239,7 +289,8 @@ class LockingPacket {
 	System.out.println("nWorkers: " + nWorkers);
 	System.out.println("lockType:" + lockType);
 	System.out.println("cacheR:" + cacheR);
-	System.out.println("Packets/ms: " + (double)(disp.count)/timer.getElapsedTime());
+	System.out.println("dispType:" + dispType);
+	System.out.println("Packets/ms: " + (double)(disp.count())/timer.getElapsedTime());
     }
 }
 
