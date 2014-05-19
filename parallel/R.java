@@ -6,6 +6,7 @@ interface R {
     public void unlockWrite(int address);
     public void lockRead(int address);
     public void unlockRead(int address);
+    public double averageSkipListLength();
 }
 
 
@@ -19,7 +20,13 @@ class CoarseLockingR implements R {
 	}
 	lock = new ReentrantReadWriteLock();
     }
-    
+    public double averageSkipListLength(){
+	double total = 0;
+	for (int i = 0; i < dests.length; i++) {
+	    total += dests[i].size();
+	}
+	return total/dests.length;
+    }
     public void processConfigPacket(Config conf) {
 	dests[conf.address].setRange(conf.addressBegin, conf.addressEnd, conf.acceptingRange);
     }
@@ -53,7 +60,13 @@ class FineLockingR implements R {
 	    locks[i] = new ReentrantReadWriteLock();
 	}
     }
-    
+    public double averageSkipListLength(){
+	double total = 0;
+	for (int i = 0; i < dests.length; i++) {
+	    total += dests[i].size();
+	}
+	return total/dests.length;
+    }    
     public void processConfigPacket(Config conf) {
 	dests[conf.address].setRange(conf.addressBegin, conf.addressEnd, conf.acceptingRange);	
     }
@@ -89,7 +102,13 @@ class StripedLockingR implements R {
 	    locks[i] = new ReentrantReadWriteLock();
 	}
     }
-    
+    public double averageSkipListLength(){
+	double total = 0;
+	for (int i = 0; i < dests.length; i++) {
+	    total += dests[i].size();
+	}
+	return total/dests.length;
+    }    
     public void processConfigPacket(Config conf) {
 	dests[conf.address].setRange(conf.addressBegin, conf.addressEnd, conf.acceptingRange);	
     }

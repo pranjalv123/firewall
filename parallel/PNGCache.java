@@ -18,7 +18,10 @@ class RCache implements R{
 	    }
 	};
     }
-    
+    public double averageSkipListLength(){
+	
+	return r.averageSkipListLength();
+    }
     void setOtherCaches(RCache[] others) {
 	this.others = others;	    
     }

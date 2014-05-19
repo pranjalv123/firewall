@@ -47,6 +47,16 @@ class IntervalSkipList {
 	}
     }       
 
+    public int size() {
+	Node current = head;
+	int count = 0;
+	while (current != null) {
+	    current = current.next[0];
+	    count++;
+	}
+	return count;
+    }
+
     public void setRange(int start, int end, boolean tf) {
 	//find start of range
 	Node pred = head;

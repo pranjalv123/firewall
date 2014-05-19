@@ -290,6 +290,7 @@ class LockingPacket {
 	System.out.println("lockType:" + lockType);
 	System.out.println("cacheR:" + cacheR);
 	System.out.println("dispType:" + dispType);
+	System.out.println("skipListLength:" + r.averageSkipListLength());
 	System.out.println("Packets/ms: " + (double)(disp.count())/timer.getElapsedTime());
     }
 }
